@@ -159,9 +159,12 @@ export async function onRequest({request,env,next}) {
     // Zhipu first (glm-4.7-flash). No key configured -> skip silently and
     // fall through to Workers AI; the code goes live first and activates
     // automatically once ZHIPU_API_KEY is set in Pages env vars.
-    if(env.ZHIPU_API_KEY){
+    // Accept ZHIPU_API_KEY (canonical), ZHIPU_KEY, or zhipu: the key was
+    // once saved under the lowercase name, so all three resolve to it.
+    const zhipuKey=env.ZHIPU_API_KEY||env.ZHIPU_KEY||env.zhipu;
+    if(zhipuKey){
       try{
-        const z=await tryZhipu(aiText,env.ZHIPU_API_KEY);
+        const z=await tryZhipu(aiText,zhipuKey);
         if(z && z.length<=3000 && VALID.test(z) && isValidNormalized(z)){ normalized=z; via='zhipu'; }
         else aiBadOutput=true;
       }catch(e){ aiFailed=true; }
