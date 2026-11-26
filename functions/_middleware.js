@@ -15,10 +15,12 @@ function cnFull(s){
 // Mirrors the client's canonical shapes; returns null when it cannot parse.
 function localNormalize(text){
   let s=text.normalize('NFKC').replace(/[龍馬雞豬]/g,c=>({'龍':'龙','馬':'马','雞':'鸡','豬':'猪'})[c]);
+  s=s.replace(/([鼠牛虎兔龙蛇马羊猴鸡狗猪])子/g,'$1');
   s=s.replace(/([一二三四五六七八九十]+)号/g,(m,cn)=>{const n=cnFull(cn);return (n!==null&&n>=1&&n<=49)?(n+'号'):m;});
   s=s.replace(/\s*(?:和|跟|及)\s*(?=[鼠牛虎兔龙蛇马羊猴鸡狗猪])/g,';');
   s=s.replace(/([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)\s*各包\s*(\d+(?:\.\d{1,2})?)/g,(_,a,amt)=>Array.from(a,x=>x+'包'+amt).join(';'));
-  const groups=s.split(/[;\n]+/).map(g=>g.trim()).filter(Boolean).map(g=>{
+  const groups=s.split(/\n+/).map(line=>line.trim()).filter(Boolean).flatMap(line=>{
+    const gs=line.split(/;+/).map(g=>g.trim()).filter(Boolean).map(g=>{
     let t=g.replace(/^(?:请帮我|帮我|请|我要|我想|我|人家)\s*/,'').replace(/^(?:买|下|下注)\s*/,'').trim();
     t=t.replace(/^(?:数字|号码)\s*[：:]?\s*/,'');
     t=t.replace(/(?:每个号码|每个号|每个|每号|每注|各买|各下)/g,'各');
@@ -35,6 +37,17 @@ function localNormalize(text){
     t=t.replace(/\s+/g,' ').trim();
     return t;
   }).map(g=>g.replace(/\s+(各|包)/g,'$1').replace(/(各|包)\s+/g,'$1'));
+    // One bare group on a line shares the line's single 各 amount:
+    // "一号、五号和兔子各10" -> "1/5各10" + "兔各10". 包 is a group
+    // total, so it is never distributed.
+    const bare=gs.map((g,i)=>({g,i})).filter(({g})=>/^(?:\d{1,2}(?:\/\d{1,2})*|[鼠牛虎兔龙蛇马羊猴鸡狗猪]+|[0-9]尾)$/.test(g));
+    if(bare.length===1){
+      const others=gs.filter((_,i)=>i!==bare[0].i);
+      const amounts=others.map(g=>{const m=g.match(/(各|包)(\d+(?:\.\d{1,2})?)$/);return m?{mode:m[1],amt:m[2]}:null;});
+      if(others.length>0&&amounts.every(a=>a&&a.mode==='各'&&a.amt===amounts[0].amt)) gs[bare[0].i]=bare[0].g+'各'+amounts[0].amt;
+    }
+    return gs;
+  });
   const okNum=/^(\d{1,2}(\/\d{1,2})*)\s*(各|包)?\s*\d+(\.\d{1,2})?$/;
   const okZod=/^[鼠牛虎兔龙蛇马羊猴鸡狗猪]+(包|各)\d+(\.\d{1,2})?$/;
   const okTail=/^[0-9]尾(各|包)\d+(\.\d{1,2})?$/;
@@ -59,6 +72,7 @@ function isValidNormalized(text){
 function preprocessForAI(text){
   return text.normalize('NFKC')
     .replace(/[龍馬雞豬]/g,c=>({'龍':'龙','馬':'马','雞':'鸡','豬':'猪'})[c])
+    .replace(/([鼠牛虎兔龙蛇马羊猴鸡狗猪])子/g,'$1')
     .replace(/数字|号码/g,'')
     .replace(/(?:块钱|美元|美金|块|元)/g,'')
     .replace(/\s*[：:]\s*/g,' ')
