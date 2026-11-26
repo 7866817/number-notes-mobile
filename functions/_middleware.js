@@ -125,9 +125,11 @@ export async function onRequest({request,env,next}) {
     const body = await request.json().catch(()=>null);
     if (typeof body?.model !== 'string' || typeof body?.text !== 'string' || !body.text.trim()) return reply({error:'need model+text'},400);
     const aiText = preprocessForAI(body.text);
+    const sys = typeof body.system === 'string' && body.system.trim() ? body.system : SYSTEM;
+    const mt = typeof body.max_tokens === 'number' && body.max_tokens > 0 ? body.max_tokens : MAX_TOKENS;
     const t0 = Date.now();
     try {
-      const result = await env.AI.run(body.model,{messages:[{role:'system',content:SYSTEM},{role:'user',content:aiText}],temperature:0,max_tokens:MAX_TOKENS});
+      const result = await env.AI.run(body.model,{messages:[{role:'system',content:sys},{role:'user',content:aiText}],temperature:0,max_tokens:mt});
       const out = (result.response ?? '').trim();
       return reply({model:body.model, ms:Date.now()-t0, out, valid: out.length>0 && out.length<=3000 && VALID.test(out) && isValidNormalized(out)});
     } catch(e) {
