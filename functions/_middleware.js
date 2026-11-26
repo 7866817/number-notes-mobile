@@ -137,7 +137,7 @@ function installFallback() {
 }
 export async function onRequest({request,env,next}) {
   const url = new URL(request.url);
-  const reply = (data,status=200) => Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
+  const reply = (data,status=200,extra={}) => Response.json(data,{status,headers:{'Cache-Control':'no-store',...extra}});
   if (url.pathname === '/smart-preview.js') return new Response('('+installFallback.toString()+')()', {headers:{'Content-Type':'application/javascript;charset=utf-8'}});
   if (url.pathname !== '/api/recognize') {
     const response = await next();
@@ -152,6 +152,7 @@ export async function onRequest({request,env,next}) {
   // The 27s "Failed to fetch" on the phone was three sequential model
   // retries for an input the local parser could have handled.
   let normalized=localNormalize(input.text);
+  let via='local';
   let aiFailed=false, aiBadOutput=false;
   if(!normalized){
     const aiText=preprocessForAI(input.text);
@@ -161,7 +162,7 @@ export async function onRequest({request,env,next}) {
     if(env.ZHIPU_API_KEY){
       try{
         const z=await tryZhipu(aiText,env.ZHIPU_API_KEY);
-        if(z && z.length<=3000 && VALID.test(z) && isValidNormalized(z)) normalized=z;
+        if(z && z.length<=3000 && VALID.test(z) && isValidNormalized(z)){ normalized=z; via='zhipu'; }
         else aiBadOutput=true;
       }catch(e){ aiFailed=true; }
     }
@@ -170,12 +171,12 @@ export async function onRequest({request,env,next}) {
         try{
           const result=await env.AI.run(model,{messages:[{role:'system',content:SYSTEM},{role:'user',content:aiText}],temperature:0,max_tokens:MAX_TOKENS});
           const text=result.response?.trim();
-          if(text && text.length<=3000 && VALID.test(text) && isValidNormalized(text)){ normalized=text; break; }
+          if(text && text.length<=3000 && VALID.test(text) && isValidNormalized(text)){ normalized=text; via='workers-ai:'+model; break; }
           aiBadOutput=true;
         }catch(e){ aiFailed=true; }
       }
     }
   }
   if(!normalized) return reply({error: aiFailed ? '智能识别暂时不可用，请稍后重试' : '请补充号码、金额或分配方式'}, aiFailed ? 503 : 422);
-  return reply({normalized});
+  return reply({normalized},200,{'X-AI-Via':via});
 }
