@@ -156,26 +156,27 @@ export async function onRequest({request,env,next}) {
   let aiFailed=false, aiBadOutput=false;
   if(!normalized){
     const aiText=preprocessForAI(input.text);
-    // Zhipu first (glm-4.7-flash). No key configured -> skip silently and
-    // fall through to Workers AI; the code goes live first and activates
-    // automatically once ZHIPU_API_KEY is set in Pages env vars.
-    // Accept ZHIPU_API_KEY (canonical), ZHIPU_KEY, or zhipu: the key was
-    // once saved under the lowercase name, so all three resolve to it.
-    const zhipuKey=env.ZHIPU_API_KEY||env.ZHIPU_KEY||env.zhipu;
-    if(zhipuKey){
+    // Workers AI first: llama-fast is sub-second and accurate. Zhipu is
+    // the fallback, not the primary: it took 11.6s on the calculator
+    // proxy and timed out twice at 15s here, so calling it first made
+    // the B input slower (15.8s) than the fallback alone (0.67s).
+    for (const model of MODELS){
       try{
-        const z=await tryZhipu(aiText,zhipuKey);
-        if(z && z.length<=3000 && VALID.test(z) && isValidNormalized(z)){ normalized=z; via='zhipu'; }
-        else aiBadOutput=true;
+        const result=await env.AI.run(model,{messages:[{role:'system',content:SYSTEM},{role:'user',content:aiText}],temperature:0,max_tokens:MAX_TOKENS});
+        const text=result.response?.trim();
+        if(text && text.length<=3000 && VALID.test(text) && isValidNormalized(text)){ normalized=text; via='workers-ai:'+model; break; }
+        aiBadOutput=true;
       }catch(e){ aiFailed=true; }
     }
     if(!normalized){
-      for (const model of MODELS){
+      // Zhipu fallback (glm-4.7-flash). No key configured -> skip
+      // silently. Accept ZHIPU_API_KEY (canonical), ZHIPU_KEY, or zhipu.
+      const zhipuKey=env.ZHIPU_API_KEY||env.ZHIPU_KEY||env.zhipu;
+      if(zhipuKey){
         try{
-          const result=await env.AI.run(model,{messages:[{role:'system',content:SYSTEM},{role:'user',content:aiText}],temperature:0,max_tokens:MAX_TOKENS});
-          const text=result.response?.trim();
-          if(text && text.length<=3000 && VALID.test(text) && isValidNormalized(text)){ normalized=text; via='workers-ai:'+model; break; }
-          aiBadOutput=true;
+          const z=await tryZhipu(aiText,zhipuKey);
+          if(z && z.length<=3000 && VALID.test(z) && isValidNormalized(z)){ normalized=z; via='zhipu'; }
+          else aiBadOutput=true;
         }catch(e){ aiFailed=true; }
       }
     }
