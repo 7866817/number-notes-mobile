@@ -61,7 +61,15 @@ function splitGroups(text){
 }
 function recognize(text){
  const normalized=text.normalize('NFKC').replace(/[龍馬雞豬]/g,c=>({'龍':'龙','馬':'马','雞':'鸡','豬':'猪'})[c]);
- const lines=splitGroups(normalized);
+ const expanded=normalized.replace(/([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)\s*各包\s*(\d+(?:\.\d{1,2})?)/g, (_,animals,amount)=>Array.from(animals,a=>a+'包'+amount).join(';'));
+ const numeric=expanded.replace(/\b(\d{1,2}(?:[ \t,、/]+\d{1,2})*)\s*各\s*(\d+(?:\.\d{1,2})?)/g,(_,list,amount)=>{
+  const counts=new Map();
+  for(const n of list.split(/[ \t,、/]+/).map(Number))counts.set(n,(counts.get(n)||0)+1);
+  const groups=[];
+  for(let k=1;k<=Math.max(...counts.values());k++)groups.push([...counts].filter(([,count])=>count>=k).map(([n])=>n).join('/')+'各'+amount);
+  return groups.join(';');
+ });
+ const lines=splitGroups(numeric);
  if(!lines.length)throw Error('请先输入号码和金额。');
  return lines.map((source,i)=>{
   let s=source.replace(/^(?:请帮我|帮我|请|我要|我想|我|人家)\s*/,'').replace(/^(?:买|下|下注)\s*/,'').trim();
