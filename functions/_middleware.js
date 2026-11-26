@@ -32,6 +32,7 @@ function localNormalize(text){
     t=t.replace(/(\d{1,2})\s*号/g,'$1');
     t=t.replace(/(\d)\s*[、，,]\s*(?=\d)/g,'$1/');
     t=t.replace(/\s*[：:]\s*(?=各|包)/g,' ');
+    t=t.replace(/(各|包)\s*[：:]\s*/g,'$1');
     t=t.replace(/[,，、]\s*(?=各|包)/g,' ');
     t=t.replace(/(?:块钱|块|元|美元|美金)\s*$/g,'');
     t=t.replace(/\s+/g,' ').trim();
