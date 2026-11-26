@@ -59,8 +59,11 @@ function splitGroups(text){
  }
  return groups;
 }
+const CN_D={一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};
+const CN_U={十:10,百:100,千:1000};
+function cnFull(s){let t=0,c=0;for(const ch of s){if(CN_D[ch]!==undefined)c=CN_D[ch];else if(CN_U[ch]!==undefined){t+=(c||1)*CN_U[ch];c=0;}else return null;}t+=c;return t>0&&t<=9999?t:null;}
 function recognize(text){
- const normalized=text.normalize('NFKC').replace(/[龍馬雞豬]/g,c=>({'龍':'龙','馬':'马','雞':'鸡','豬':'猪'})[c]);
+ const normalized=text.normalize('NFKC').replace(/[龍馬雞豬]/g,c=>({'龍':'龙','馬':'马','雞':'鸡','豬':'猪'})[c]).replace(/([一二三四五六七八九十]+)号/g,(m,cn)=>{const n=cnFull(cn);return (n!==null&&n>=1&&n<=49)?(n+'号'):m;});
  const expanded=normalized.replace(/([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)\s*各包\s*(\d+(?:\.\d{1,2})?)/g, (_,animals,amount)=>Array.from(animals,a=>a+'包'+amount).join(';'));
  const numeric=expanded.replace(/\b(\d{1,2}(?:[ \t,、/]+\d{1,2})*)\s*各\s*(\d+(?:\.\d{1,2})?)/g,(_,list,amount)=>{
   const counts=new Map();
