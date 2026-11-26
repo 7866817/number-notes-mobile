@@ -119,7 +119,11 @@ function recognize(text){
    return parseStrict(canonical)[0];
   }
   try{return {source,choices:ambiguous?{each:expand('各'),total:expand('包')}:null,row:ambiguous?null:expand()};}
-  catch(e){throw Error('第 '+(i+1)+' 组暂时无法确定：'+source+'。请写清号码或生肖，以及“各多少”或“总共多少”。');}
+  catch(e){
+   const reason=e&&e.message?e.message:'';
+   if(/号码范围|重复|金额/.test(reason))throw Error('第 '+(i+1)+' 组：'+source+'。'+reason);
+   throw Error('第 '+(i+1)+' 组暂时无法确定：'+source+'。请写清号码或生肖，以及“各多少”或“总共多少”。');
+  }
  });
 }
 function valid(items){return Array.isArray(items)&&items.length<=100000&&items.every(r=>Array.isArray(r.nums)&&r.nums.length>0&&r.nums.length<=49&&new Set(r.nums).size===r.nums.length&&r.nums.every(n=>Number.isInteger(n)&&n>=1&&n<=49)&&Number.isSafeInteger(r.cents)&&r.cents>=0&&r.cents<=10000000000&&(r.allocations===undefined?r.cents>0:(Array.isArray(r.allocations)&&r.allocations.length===r.nums.length&&r.allocations.every(c=>Number.isSafeInteger(c)&&c>=0&&c<=10000000000)&&r.allocations.some(c=>c>0)))&&(r.packLabel===undefined||(typeof r.packLabel==='string'&&r.packLabel.length<50))&&Number.isFinite(r.time)&&typeof r.id==='string'&&(r.tailLabel===undefined||(typeof r.tailLabel==='string'&&r.tailLabel.length<50))&&(r.person===undefined||(typeof r.person==='string'&&r.person.length<=40)))&&new Set(items.map(r=>r.id)).size===items.length;}
