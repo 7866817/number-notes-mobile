@@ -2,6 +2,9 @@
 const zodiac=['马','蛇','龙','兔','虎','牛','鼠','猪','狗','鸡','猴','羊'];
 const animal=n=>zodiac[(n-1)%12];
 const key='simple-number-notes-v1';
+const keyPeriods='simple-number-notes-periods-v1';
+const keyCurrent='simple-number-notes-current-period-v1';
+function todayId(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const $=id=>document.getElementById(id);
 const money=c=>(c/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 function amountFor(r,n){return r.allocations ? r.allocations[r.nums.indexOf(n)] : r.cents;}
@@ -121,10 +124,68 @@ function recognize(text){
 }
 function valid(items){return Array.isArray(items)&&items.length<=100000&&items.every(r=>Array.isArray(r.nums)&&r.nums.length>0&&r.nums.length<=49&&new Set(r.nums).size===r.nums.length&&r.nums.every(n=>Number.isInteger(n)&&n>=1&&n<=49)&&Number.isSafeInteger(r.cents)&&r.cents>=0&&r.cents<=10000000000&&(r.allocations===undefined?r.cents>0:(Array.isArray(r.allocations)&&r.allocations.length===r.nums.length&&r.allocations.every(c=>Number.isSafeInteger(c)&&c>=0&&c<=10000000000)&&r.allocations.some(c=>c>0)))&&(r.packLabel===undefined||(typeof r.packLabel==='string'&&r.packLabel.length<50))&&Number.isFinite(r.time)&&typeof r.id==='string'&&(r.tailLabel===undefined||(typeof r.tailLabel==='string'&&r.tailLabel.length<50))&&(r.person===undefined||(typeof r.person==='string'&&r.person.length<=40)))&&new Set(items.map(r=>r.id)).size===items.length;}
 let rows=[];try{const saved=JSON.parse(localStorage.getItem(key)||'[]');if(!valid(saved))throw Error();rows=saved;}catch{$('message').textContent='无法读取本机记录，请尝试恢复备份。';}
+let periods=[];try{const saved=JSON.parse(localStorage.getItem(keyPeriods)||'[]');if(!Array.isArray(saved)||!saved.every(p=>p&&typeof p.id==='string'&&valid(p.rows)))throw Error();periods=saved;}catch{$('message').textContent='无法读取往期记录。';}
+let currentPeriod=localStorage.getItem(keyCurrent)||'';
+if(!currentPeriod){currentPeriod=todayId();try{localStorage.setItem(keyCurrent,currentPeriod);}catch{}}
+if(currentPeriod<todayId()){
+ let archived=null;
+ if(rows.length){archived=currentPeriod;periods.unshift({id:currentPeriod,rows,closedAt:Date.now()});savePeriods();rows=[];try{localStorage.setItem(key,JSON.stringify(rows));}catch{}}
+ currentPeriod=todayId();try{localStorage.setItem(keyCurrent,currentPeriod);}catch{}
+ if(archived)$('message').textContent='已自动归档 '+archived+'，开启新一期 '+currentPeriod+'。';
+}
+let openPeriodId=null;
 let riskSort='profit',riskDirection=1;
 let filter='all';let personFilter='';let selectedNumber=null;
 function commit(next){try{localStorage.setItem(key,JSON.stringify(next));rows=next;render();return true;}catch{$('message').textContent='保存失败，浏览器存储不可用或已满。请导出备份。';return false;}}
-function render(){renderRisk();if(selectedNumber!==null)showPayout(selectedNumber,false);const totals=Array(50).fill(0);rows.forEach(r=>r.nums.forEach(n=>totals[n]+=amountFor(r,n)));const grand=totals.reduce((a,b)=>a+b,0);$('total').textContent=money(grand);$('count').textContent=rows.length;$('covered').textContent=totals.filter(Boolean).length+' / 49';$('undo').disabled=!rows.length;let nums=Array.from({length:49},(_,i)=>i+1);if(filter==='only')nums=nums.filter(n=>totals[n]);if(filter==='sort')nums.sort((a,b)=>totals[b]-totals[a]||a-b);$('grid').innerHTML=nums.map(n=>`<button type="button" data-number="${n}" aria-label="查看 ${String(n).padStart(2,'0')} 号赔付" class="cell ${totals[n]?'filled':''} ${selectedNumber===n?'selected':''}"><b>${String(n).padStart(2,'0')}<em class="zodiac">${animal(n)}</em></b><span>${filter==='risk'?money(grand-totals[n]*47):(totals[n]?money(totals[n]):'—')}</span></button>`).join('');$('summaryNote').textContent=filter==='risk'?'开出该号码后的盈亏':'号码下方为累计金额';$('gridEmpty').classList.toggle('hidden',nums.length>0);const names=[...new Set(rows.map(r=>r.person||'未填写'))].sort();$('personFilter').replaceChildren(new Option('全部人员',''));names.forEach(name=>$('personFilter').add(new Option(name,name)));if(!names.includes(personFilter))personFilter='';$('personFilter').value=personFilter;const visibleRows=rows.filter(r=>!personFilter||(r.person||'未填写')===personFilter);$('personStats').textContent=visibleRows.length+' 笔 · 合计 '+money(visibleRows.reduce((s,r)=>s+rowTotal(r),0));$('records').replaceChildren();if(!visibleRows.length){const p=document.createElement('p');p.className='empty';p.textContent='还没有记录，添加第一笔吧';$('records').append(p);}visibleRows.slice().reverse().forEach(r=>{const el=document.createElement('div');el.className='record';const left=document.createElement('div'),title=document.createElement('strong'),sub=document.createElement('small');title.textContent=(r.person||'未填写')+' · '+r.nums.map(n=>String(n).padStart(2,'0')+animal(n)).join(' / ');sub.textContent=(r.tailLabel?r.tailLabel+' · 每个 '+money(r.cents):r.allocations?(r.packLabel+' · '+r.nums.map(n=>String(n).padStart(2,'0')+'='+money(amountFor(r,n))).join(' / ')):'每个 '+money(r.cents))+' · '+new Date(r.time).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});left.append(title,sub);const right=document.createElement('div');right.className='right';const amt=document.createElement('strong');amt.textContent=money(rowTotal(r));const del=document.createElement('button');del.textContent='删除';del.onclick=()=>{if(confirm('删除这笔记录？'))commit(rows.filter(x=>x.id!==r.id));};right.append(amt,del);el.append(left,right);$('records').append(el);});}
+function savePeriods(){try{localStorage.setItem(keyPeriods,JSON.stringify(periods));return true;}catch{$('message').textContent='往期保存失败，浏览器存储不可用或已满。请导出备份。';return false;}}
+function saveCurrentPeriod(){try{localStorage.setItem(keyCurrent,currentPeriod);}catch{}}
+function freshPeriodId(){const base=todayId();const taken=new Set(periods.map(p=>p.id));taken.add(currentPeriod);let id=base,n=2;while(taken.has(id)){id=base+'-'+n++;}return id;}
+function archiveCurrentPeriod(){
+ if(rows.length){periods.unshift({id:currentPeriod,rows,closedAt:Date.now()});if(!savePeriods())return false;}
+ rows=[];currentPeriod=freshPeriodId();saveCurrentPeriod();
+ try{localStorage.setItem(key,JSON.stringify(rows));}catch{}
+ render();$('message').textContent='已开启新一期 '+currentPeriod+'，旧期已归档到往期。';return true;
+}
+function newPeriod(){if(!rows.length){$('message').textContent='当前这期还是空的，不用开新一期。';return;}if(confirm('开新一期会把当前这期归档，确定吗？'))archiveCurrentPeriod();}
+function periodTotals(p){const totals=Array(50).fill(0);p.rows.forEach(r=>r.nums.forEach(n=>totals[n]+=amountFor(r,n)));return {totals,grand:totals.reduce((a,b)=>a+b,0),covered:totals.filter(Boolean).length};}
+function render(){renderRisk();$('periodLabel').textContent='本期 · '+currentPeriod;renderPeriods();if(selectedNumber!==null)showPayout(selectedNumber,false);const totals=Array(50).fill(0);rows.forEach(r=>r.nums.forEach(n=>totals[n]+=amountFor(r,n)));const grand=totals.reduce((a,b)=>a+b,0);$('total').textContent=money(grand);$('count').textContent=rows.length;$('covered').textContent=totals.filter(Boolean).length+' / 49';$('undo').disabled=!rows.length;let nums=Array.from({length:49},(_,i)=>i+1);if(filter==='only')nums=nums.filter(n=>totals[n]);if(filter==='sort')nums.sort((a,b)=>totals[b]-totals[a]||a-b);$('grid').innerHTML=nums.map(n=>`<button type="button" data-number="${n}" aria-label="查看 ${String(n).padStart(2,'0')} 号赔付" class="cell ${totals[n]?'filled':''} ${selectedNumber===n?'selected':''}"><b>${String(n).padStart(2,'0')}<em class="zodiac">${animal(n)}</em></b><span>${filter==='risk'?money(grand-totals[n]*47):(totals[n]?money(totals[n]):'—')}</span></button>`).join('');$('summaryNote').textContent=filter==='risk'?'开出该号码后的盈亏':'号码下方为累计金额';$('gridEmpty').classList.toggle('hidden',nums.length>0);const names=[...new Set(rows.map(r=>r.person||'未填写'))].sort();$('personFilter').replaceChildren(new Option('全部人员',''));names.forEach(name=>$('personFilter').add(new Option(name,name)));if(!names.includes(personFilter))personFilter='';$('personFilter').value=personFilter;const visibleRows=rows.filter(r=>!personFilter||(r.person||'未填写')===personFilter);$('personStats').textContent=visibleRows.length+' 笔 · 合计 '+money(visibleRows.reduce((s,r)=>s+rowTotal(r),0));$('records').replaceChildren();if(!visibleRows.length){const p=document.createElement('p');p.className='empty';p.textContent='还没有记录，添加第一笔吧';$('records').append(p);}visibleRows.slice().reverse().forEach(r=>{const el=document.createElement('div');el.className='record';const left=document.createElement('div'),title=document.createElement('strong'),sub=document.createElement('small');title.textContent=(r.person||'未填写')+' · '+r.nums.map(n=>String(n).padStart(2,'0')+animal(n)).join(' / ');sub.textContent=(r.tailLabel?r.tailLabel+' · 每个 '+money(r.cents):r.allocations?(r.packLabel+' · '+r.nums.map(n=>String(n).padStart(2,'0')+'='+money(amountFor(r,n))).join(' / ')):'每个 '+money(r.cents))+' · '+new Date(r.time).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});left.append(title,sub);const right=document.createElement('div');right.className='right';const amt=document.createElement('strong');amt.textContent=money(rowTotal(r));const del=document.createElement('button');del.textContent='删除';del.onclick=()=>{if(confirm('删除这笔记录？'))commit(rows.filter(x=>x.id!==r.id));};right.append(amt,del);el.append(left,right);$('records').append(el);});}
+function renderPeriods(){
+ const list=$('periodList');list.replaceChildren();
+ list.classList.toggle('hidden',!!openPeriodId);
+ $('periodDetail').classList.toggle('hidden',!openPeriodId);
+ if(!periods.length){const p=document.createElement('p');p.className='empty';p.textContent='还没有往期，当前这期归档后会出现在这里';list.append(p);}
+ periods.forEach(p=>{
+  const t=periodTotals(p);
+  const b=document.createElement('button');b.type='button';b.className='period-row';
+  const left=document.createElement('div'),title=document.createElement('strong'),sub=document.createElement('small');
+  title.textContent=p.id;sub.textContent=p.rows.length+' 笔 · 已录入 '+t.covered+' / 49 个号码';
+  left.append(title,sub);
+  const right=document.createElement('div');right.className='right';const amt=document.createElement('strong');amt.textContent=money(t.grand);right.append(amt);
+  b.append(left,right);b.onclick=()=>showPeriod(p.id);list.append(b);
+ });
+ if(openPeriodId)showPeriod(openPeriodId);
+}
+function showPeriod(id){
+ const p=periods.find(x=>x.id===id);if(!p){openPeriodId=null;$('periodDetail').classList.add('hidden');return;}
+ openPeriodId=id;$('periodList').classList.add('hidden');$('periodDetail').classList.remove('hidden');
+ const t=periodTotals(p);const body=$('periodDetailBody');body.replaceChildren();
+ const h=document.createElement('h2');h.textContent=p.id+' · 明细';body.append(h);
+ const stats=document.createElement('div');stats.className='period-result';
+ const s1=document.createElement('div');s1.className='period-numbers';
+ const d1=document.createElement('div'),d2=document.createElement('div');
+ const l1=document.createElement('small');l1.textContent='本期总金额';const v1=document.createElement('strong');v1.textContent=money(t.grand);d1.append(l1,v1);
+ const l2=document.createElement('small');l2.textContent='录入笔数';const v2=document.createElement('strong');v2.textContent=String(p.rows.length);d2.append(l2,v2);
+ s1.append(d1,d2);stats.append(s1);
+ const cov=document.createElement('p');cov.className='hint';cov.textContent='已录入号码 '+t.covered+' / 49';stats.append(cov);
+ body.append(stats);
+ const people=new Map();p.rows.forEach(r=>{const name=r.person||'未填写';people.set(name,(people.get(name)||0)+rowTotal(r));});
+ const ph=document.createElement('p');ph.className='muted';ph.textContent='按人汇总';body.append(ph);
+ [...people].sort((a,b)=>b[1]-a[1]).forEach(([name,amount])=>{const row=document.createElement('div');row.className='payout-person';const left=document.createElement('div'),label=document.createElement('span');label.textContent=name;left.append(label);const total=document.createElement('strong');total.textContent=money(amount);row.append(left,total);body.append(row);});
+ const nh=document.createElement('p');nh.className='muted';nh.textContent='号码汇总';body.append(nh);
+ t.totals.map((c,n)=>({n,c})).filter(x=>x.n>0&&x.c).sort((a,b)=>b.c-a.c).forEach(x=>{const row=document.createElement('div');row.className='payout-person';const left=document.createElement('div'),label=document.createElement('span');label.textContent=String(x.n).padStart(2,'0')+' '+animal(x.n);left.append(label);const total=document.createElement('strong');total.textContent=money(x.c);row.append(left,total);body.append(row);});
+ const rh=document.createElement('p');rh.className='muted';rh.textContent='录入记录';body.append(rh);
+ p.rows.slice().reverse().forEach(r=>{const el=document.createElement('div');el.className='record';const left=document.createElement('div'),title=document.createElement('strong'),sub=document.createElement('small');title.textContent=(r.person||'未填写')+' · '+r.nums.map(n=>String(n).padStart(2,'0')+animal(n)).join(' / ');sub.textContent=(r.tailLabel?r.tailLabel+' · 每个 '+money(r.cents):r.allocations?(r.packLabel+' · '+r.nums.map(n=>String(n).padStart(2,'0')+'='+money(amountFor(r,n))).join(' / ')):'每个 '+money(r.cents))+' · '+new Date(r.time).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});left.append(title,sub);const right=document.createElement('div');right.className='right';const amt=document.createElement('strong');amt.textContent=money(rowTotal(r));right.append(amt);el.append(left,right);body.append(el);});
+}
 let pending=null;
 function resetPreview(){pending=null;$('recognition').classList.add('hidden');$('previewRows').replaceChildren();}
 function renderPreview(){
@@ -145,16 +206,17 @@ $('input').addEventListener('input',resetPreview);$('person').addEventListener('
 $('undo').onclick=()=>{if(rows.length&&commit(rows.slice(0,-1)))$('message').textContent='已撤销最近一笔。';};
 ['all','only','sort','risk'].forEach(id=>$(id).onclick=()=>{filter=id;['all','only','sort','risk'].forEach(x=>$(x).classList.toggle('active',x===id));render();});
 function page(view){
- const history=view==='history',risk=view==='risk';
- $('history').classList.toggle('hidden',!history);$('ranking').classList.toggle('hidden',!risk);
- $('entry').classList.toggle('hidden',history||risk);$('summary').classList.toggle('hidden',history||risk);
- $('historyNav').classList.toggle('active',history);$('riskNav').classList.toggle('active',risk);$('homeNav').classList.toggle('active',!history&&!risk);window.scrollTo(0,0);
+ const history=view==='history',risk=view==='risk',periodsView=view==='periods';
+ $('history').classList.toggle('hidden',!history);$('ranking').classList.toggle('hidden',!risk);$('periods').classList.toggle('hidden',!periodsView);
+ $('entry').classList.toggle('hidden',history||risk||periodsView);$('summary').classList.toggle('hidden',history||risk||periodsView);
+ $('historyNav').classList.toggle('active',history);$('riskNav').classList.toggle('active',risk);$('periodsNav').classList.toggle('active',periodsView);$('homeNav').classList.toggle('active',!history&&!risk&&!periodsView);window.scrollTo(0,0);
 }
 $('personFilter').onchange=e=>{personFilter=e.target.value;render();};
-$('homeNav').onclick=()=>page('home');$('historyNav').onclick=()=>page('history');$('riskNav').onclick=()=>page('risk');
+$('homeNav').onclick=()=>page('home');$('historyNav').onclick=()=>page('history');$('riskNav').onclick=()=>page('risk');$('periodsNav').onclick=()=>page('periods');
+$('newPeriod').onclick=newPeriod;$('newPeriod2').onclick=newPeriod;$('backPeriods').onclick=()=>{openPeriodId=null;renderPeriods();};
 $('clear').onclick=()=>{if(rows.length&&confirm('清空全部记录？建议先导出备份。'))commit([]);};
 $('copy').onclick=async()=>{const totals=Array(50).fill(0);rows.forEach(r=>r.nums.forEach(n=>totals[n]+=amountFor(r,n)));const text=totals.map((c,n)=>c?String(n).padStart(2,'0')+' '+money(c):'').filter(Boolean).join('\n')+'\n合计 '+money(totals.reduce((a,b)=>a+b,0));try{await navigator.clipboard.writeText(text);$('message').textContent='汇总已复制。';}catch{prompt('请长按复制汇总',text);}};
-$('export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,records:rows},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='jianji-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('import').onclick=()=>$('file').click();$('file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>20000000)throw Error();const data=JSON.parse(await file.text());if(data.version!==1||!valid(data.records))throw Error();if(confirm('恢复备份将替换当前记录，继续？'))commit(data.records);}catch{alert('备份文件无效，请选择本工具导出的 JSON 文件。');}finally{e.target.value='';}};
+$('export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:2,records:rows,periods,currentPeriod},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='jianji-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('import').onclick=()=>$('file').click();$('file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>20000000)throw Error();const data=JSON.parse(await file.text());if(data.version===1&&valid(data.records)){if(confirm('恢复备份将替换当前记录，继续？'))commit(data.records);}else if(data.version===2&&valid(data.records)&&Array.isArray(data.periods)&&data.periods.every(p=>p&&typeof p.id==='string'&&valid(p.rows))){if(confirm('恢复备份将替换当前记录和往期记录，继续？')){periods=data.periods;currentPeriod=typeof data.currentPeriod==='string'&&data.currentPeriod?data.currentPeriod:todayId();savePeriods();saveCurrentPeriod();commit(data.records);}}else throw Error();}catch{alert('备份文件无效，请选择本工具导出的 JSON 文件。');}finally{e.target.value='';}};
 render();
 
 function payoutFor(number,records){
