@@ -37,6 +37,7 @@ function localNormalize(text){
     t=t.replace(/[,，、]\s*(?=各|包)/g,' ');
     t=t.replace(/(?:块钱|块|元|美元|美金)\s*$/g,'');
     t=t.replace(/\s+/g,' ').trim();
+    t=t.replace(/^((?:[鼠牛虎兔龙蛇马羊猴鸡狗猪]+|[0-9]尾|\d{1,2}(?:\/\d{1,2})*))\s*[：:]?\s*(\d+(?:\.\d{1,2})?)$/,'$1各$2');
     return t;
   }).map(g=>g.replace(/\s+(各|包)/g,'$1').replace(/(各|包)\s+/g,'$1'))
   .flatMap(g=>{
