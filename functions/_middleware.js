@@ -38,7 +38,12 @@ function localNormalize(text){
     t=t.replace(/(?:块钱|块|元|美元|美金)\s*$/g,'');
     t=t.replace(/\s+/g,' ').trim();
     return t;
-  }).map(g=>g.replace(/\s+(各|包)/g,'$1').replace(/(各|包)\s+/g,'$1'));
+  }).map(g=>g.replace(/\s+(各|包)/g,'$1').replace(/(各|包)\s+/g,'$1'))
+  .flatMap(g=>{
+    const compact=g.replace(/\s+/g,'');
+    const units=compact.match(/(?:\d{1,2}(?:\/\d{1,2})*|[鼠牛虎兔龙蛇马羊猴鸡狗猪]+|[0-9]尾)(?:各|包)\d+(?:\.\d{1,2})?/g);
+    return units&&units.join('')===compact?units:[g];
+  });
     // One bare group on a line shares the line's single 各 amount:
     // "一号、五号和兔子各10" -> "1/5各10" + "兔各10". 包 is a group
     // total, so it is never distributed.
