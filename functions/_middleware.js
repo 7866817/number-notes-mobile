@@ -16,6 +16,7 @@ function cnFull(s){
 function localNormalize(text){
   let s=text.normalize('NFKC').replace(/[龍馬雞豬]/g,c=>({'龍':'龙','馬':'马','雞':'鸡','豬':'猪'})[c]);
   s=s.replace(/([鼠牛虎兔龙蛇马羊猴鸡狗猪])子/g,'$1');
+  s=s.replace(/老鼠/g,'鼠').replace(/老虎/g,'虎');
   s=s.replace(/([一二三四五六七八九十]+)号/g,(m,cn)=>{const n=cnFull(cn);return (n!==null&&n>=1&&n<=49)?(n+'号'):m;});
   s=s.replace(/\s*(?:和|跟|及)\s*(?=[鼠牛虎兔龙蛇马羊猴鸡狗猪])/g,';');
   s=s.replace(/([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)\s*各包\s*(\d+(?:\.\d{1,2})?)/g,(_,a,amt)=>Array.from(a,x=>x+'包'+amt).join(';'));
@@ -82,6 +83,7 @@ function preprocessForAI(text){
   return text.normalize('NFKC')
     .replace(/[龍馬雞豬]/g,c=>({'龍':'龙','馬':'马','雞':'鸡','豬':'猪'})[c])
     .replace(/([鼠牛虎兔龙蛇马羊猴鸡狗猪])子/g,'$1')
+    .replace(/老鼠/g,'鼠').replace(/老虎/g,'虎')
     .replace(/数字|号码/g,'')
     .replace(/(?:块钱|美元|美金|块|元)/g,'')
     .replace(/\s*[：:]\s*/g,' ')
