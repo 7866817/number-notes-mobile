@@ -160,12 +160,16 @@ function renderPeriods(){
  if(!periods.length){const p=document.createElement('p');p.className='empty';p.textContent='还没有往期，当前这期归档后会出现在这里';list.append(p);}
  periods.forEach(p=>{
   const t=periodTotals(p);
-  const b=document.createElement('button');b.type='button';b.className='period-row';
+  const row=document.createElement('div');row.className='period-row';
+  const open=document.createElement('button');open.type='button';open.className='period-open';
   const left=document.createElement('div'),title=document.createElement('strong'),sub=document.createElement('small');
   title.textContent=p.id;sub.textContent=p.rows.length+' 笔 · 已录入 '+t.covered+' / 49 个号码';
   left.append(title,sub);
   const right=document.createElement('div');right.className='right';const amt=document.createElement('strong');amt.textContent=money(t.grand);right.append(amt);
-  b.append(left,right);b.onclick=()=>showPeriod(p.id);list.append(b);
+  open.append(left,right);open.onclick=()=>showPeriod(p.id);
+  const del=document.createElement('button');del.type='button';del.className='period-del';del.textContent='删除';
+  del.onclick=()=>{if(confirm('删除往期 '+p.id+'？这一期的记录会全部删掉。')){periods=periods.filter(x=>x.id!==p.id);if(openPeriodId===p.id)openPeriodId=null;savePeriods();renderPeriods();}};
+  row.append(open,del);list.append(row);
  });
  if(openPeriodId)showPeriod(openPeriodId);
 }
